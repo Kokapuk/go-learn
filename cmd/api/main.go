@@ -3,13 +3,12 @@ package main
 import (
 	"context"
 	"fmt"
-	"go-learn/internal/users"
-	"log"
-	"net/http"
+	"go-learn/internal/auth"
+	"go-learn/internal/validation"
 	"os"
 	"strconv"
-	"time"
 
+	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5"
 	"github.com/joho/godotenv"
 )
@@ -30,33 +29,21 @@ func connectDB() *pgx.Conn {
 	return conn
 }
 
-func logging(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		start := time.Now()
-
-		next.ServeHTTP(w, r)
-
-		log.Printf("[%s] %s (%s)",
-			r.Method,
-			r.URL.Path,
-			time.Since(start),
-		)
-	})
-}
-
 func main() {
 	loadEnv()
 
-	mux := http.NewServeMux()
+	router := gin.Default()
 
 	conn := connectDB()
 	defer conn.Close(context.Background())
 
-	usersRepository := users.NewRepository(conn)
-	usersService := users.NewService(usersRepository)
-	usersHandler := users.NewHandler(usersService)
+	validation.RegisterCustomValidators()
 
-	mux.HandleFunc("POST /users", usersHandler.CreateUser)
+	authRepository := auth.NewRepository(conn)
+	authService := auth.NewService(authRepository)
+	authHandler := auth.NewHandler(authService)
+
+	router.POST("/auth/sign-up", authHandler.SignUp)
 	// mux.HandleFunc("GET /users/{id}", usersHandler.GetUser)
 
 	port, err := strconv.Atoi(os.Getenv("PORT"))
@@ -64,8 +51,7 @@ func main() {
 		panic(err)
 	}
 
-	log.Println("Listening at port", port)
-	err = http.ListenAndServe(fmt.Sprintf(":%v", port), logging(mux))
+	err = router.Run(fmt.Sprintf(":%v", port))
 	if err != nil {
 		panic(err)
 	}

@@ -1,4 +1,4 @@
-package users
+package auth
 
 import (
 	"context"
@@ -41,6 +41,8 @@ func (s *Service) createUser(
 		if errors.As(err, &pgErr) && pgErr.Code == "23505" && pgErr.ConstraintName == "users_username_key" {
 			return User{}, errUsernameTaken
 		}
+
+		return User{}, err
 	}
 
 	return user, nil

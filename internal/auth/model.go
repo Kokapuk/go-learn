@@ -1,4 +1,4 @@
-package users
+package auth
 
 import "time"
 
@@ -16,8 +16,8 @@ type UserWithPassword struct {
 }
 
 type createUserRequest struct {
-	Username string `json:"username"`
-	Password string `json:"password"`
+	Username string `json:"username" binding:"required,min=3,max=30,username"`
+	Password string `json:"password" binding:"required,min=8,max=72"`
 }
 
 type createUserParams struct {
