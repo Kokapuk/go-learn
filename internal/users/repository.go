@@ -1,29 +1,27 @@
 package users
 
-import "sync"
+import (
+	"context"
 
-type userRepository struct {
-	users  map[int]*User
-	nextID int
-	mu     sync.Mutex
+	"github.com/jackc/pgx/v5"
+)
+
+type Repository struct {
+	db *pgx.Conn
 }
 
-var repository userRepository = userRepository{users: make(map[int]*User), nextID: 1}
-
-func (u *userRepository) createUser(dto createUserDTO) *User {
-	u.mu.Lock()
-	user := &User{u.nextID, dto.Name}
-	u.users[u.nextID] = user
-	u.nextID++
-	u.mu.Unlock()
-
-	return user
+func NewRepository(db *pgx.Conn) *Repository {
+	return &Repository{db: db}
 }
 
-func (u *userRepository) getUserById(id int) *User {
-	u.mu.Lock()
-	user := u.users[id]
-	u.mu.Unlock()
+func (r *Repository) createUser(ctx context.Context, params createUserParams) (User, error) {
+	var user User
 
-	return user
+	err := r.db.QueryRow(ctx, `
+		INSERT INTO users (username, password_hash)
+		VALUES ($1, $2)
+		RETURNING id, username, created_at
+	`, params.Username, params.PasswordHash).Scan(&user.ID, &user.Username, &user.CreatedAt)
+
+	return user, err
 }
