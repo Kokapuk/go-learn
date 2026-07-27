@@ -9,7 +9,7 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
-	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/joho/godotenv"
 )
 
@@ -20,13 +20,13 @@ func loadEnv() {
 	}
 }
 
-func connectDB() *pgx.Conn {
-	conn, err := pgx.Connect(context.Background(), os.Getenv("DATABASE_URL"))
+func connectDB() *pgxpool.Pool {
+	pool, err := pgxpool.New(context.Background(), os.Getenv("DATABASE_URL"))
 	if err != nil {
 		panic(err)
 	}
 
-	return conn
+	return pool
 }
 
 func main() {
@@ -34,17 +34,21 @@ func main() {
 
 	router := gin.Default()
 
-	conn := connectDB()
-	defer conn.Close(context.Background())
+	pool := connectDB()
+	defer pool.Close()
 
 	validation.RegisterCustomValidators()
 
-	authRepository := auth.NewRepository(conn)
+	authRepository := auth.NewRepository(pool)
 	authService := auth.NewService(authRepository)
 	authHandler := auth.NewHandler(authService)
 
+	protected := router.Group("/")
+	protected.Use(authHandler.RequireAuth)
+
 	router.POST("/auth/sign-up", authHandler.SignUp)
-	// mux.HandleFunc("GET /users/{id}", usersHandler.GetUser)
+	router.POST("/auth/sign-in", authHandler.SignIn)
+	protected.GET("/auth/self", authHandler.GetSelf)
 
 	port, err := strconv.Atoi(os.Getenv("PORT"))
 	if err != nil {

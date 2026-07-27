@@ -32,7 +32,7 @@ func getValidationMessage(fe validator.FieldError) string {
 	case "max":
 		return fmt.Sprintf("The %s field max length is %s", fe.Field(), fe.Param())
 	default:
-		return "Invalid value."
+		return fe.Error()
 	}
 }
 
