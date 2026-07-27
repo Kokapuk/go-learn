@@ -6,6 +6,7 @@ import (
 	"go-learn/internal/auth"
 	"go-learn/internal/posts"
 	"go-learn/internal/validation"
+	"log"
 	"os"
 	"strconv"
 
@@ -17,7 +18,7 @@ import (
 func loadEnv() {
 	err := godotenv.Load()
 	if err != nil {
-		panic(err)
+		log.Println("No .env file detected")
 	}
 }
 
@@ -66,7 +67,7 @@ func main() {
 	router.GET("/posts", postsHandler.GetPosts)
 	protected.GET("/posts/mine", postsHandler.GetOwningPosts)
 
-	port, err := strconv.Atoi(os.Getenv("PORT"))
+	port, err := strconv.Atoi(os.Getenv("API_PORT"))
 	if err != nil {
 		panic(err)
 	}

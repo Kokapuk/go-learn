@@ -1,0 +1,47 @@
+services:
+  db:
+    image: postgres:18.4-alpine
+    env_file:
+      - .env
+    ports:
+      - '${DATABASE_PORT}:${DATABASE_PORT}'
+    volumes:
+      - postgres_data:/var/lib/postgresql
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}']
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  migrate:
+    image: migrate/migrate:v4.19.1
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./migrations:/migrations:ro
+    command:
+      [
+        '-path',
+        '/migrations',
+        '-database',
+        '${DATABASE_URL}',
+        'up',
+      ]
+
+  api:
+    env_file:
+      - .env
+    environment:
+      GIN_MODE: release
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - '${API_PORT}:${API_PORT}'
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+volumes:
+  postgres_data:

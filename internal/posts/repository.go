@@ -38,7 +38,7 @@ func (r *Repository) getPosts(ctx context.Context, params listParams) ([]Post, e
 	}
 	defer rows.Close()
 
-	var posts []Post
+	var posts []Post = make([]Post, 0)
 
 	for rows.Next() {
 		var post Post
@@ -63,8 +63,9 @@ func (r *Repository) getPostsByAuthorID(ctx context.Context, params listParams, 
 	if err != nil {
 		return nil, err
 	}
+	defer rows.Close()
 
-	var posts []Post
+	var posts []Post = make([]Post, 0)
 
 	for rows.Next() {
 		var post Post
