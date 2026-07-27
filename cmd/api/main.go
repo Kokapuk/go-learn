@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"go-learn/internal/auth"
+	"go-learn/internal/posts"
 	"go-learn/internal/validation"
 	"os"
 	"strconv"
@@ -21,7 +22,14 @@ func loadEnv() {
 }
 
 func connectDB() *pgxpool.Pool {
-	pool, err := pgxpool.New(context.Background(), os.Getenv("DATABASE_URL"))
+	ctx := context.Background()
+
+	pool, err := pgxpool.New(ctx, os.Getenv("DATABASE_URL"))
+	if err != nil {
+		panic(err)
+	}
+
+	err = pool.Ping(ctx)
 	if err != nil {
 		panic(err)
 	}
@@ -49,6 +57,14 @@ func main() {
 	router.POST("/auth/sign-up", authHandler.SignUp)
 	router.POST("/auth/sign-in", authHandler.SignIn)
 	protected.GET("/auth/self", authHandler.GetSelf)
+
+	postsRepository := posts.NewRepository(pool)
+	postsService := posts.NewService(postsRepository)
+	postsHandler := posts.NewHandler(postsService)
+
+	protected.POST("/posts", postsHandler.CreatePost)
+	router.GET("/posts", postsHandler.GetPosts)
+	protected.GET("/posts/mine", postsHandler.GetOwningPosts)
 
 	port, err := strconv.Atoi(os.Getenv("PORT"))
 	if err != nil {

@@ -102,7 +102,7 @@ func (h *Handler) GetSelf(c *gin.Context) {
 			return
 		}
 
-		log.Panicln(err)
+		log.Println(err)
 		c.JSON(http.StatusInternalServerError, httputil.ErrorResponse{Message: "Something went wrong"})
 		return
 	}
