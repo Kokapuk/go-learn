@@ -88,7 +88,8 @@ func main() {
 	protected.GET("/auth/self", authHandler.GetSelf)
 
 	postsRepository := posts.NewRepository(pool)
-	postsService := posts.NewService(postsRepository)
+	postsCache := posts.NewCache(redisClient)
+	postsService := posts.NewService(postsRepository, postsCache)
 	postsHandler := posts.NewHandler(postsService)
 
 	protected.POST("/posts", postsHandler.CreatePost)
