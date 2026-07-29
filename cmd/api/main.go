@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"go-learn/internal/auth"
+	"go-learn/internal/jobs"
 	"go-learn/internal/posts"
 	"go-learn/internal/ratelimiter"
 	"go-learn/internal/validation"
@@ -96,11 +97,20 @@ func main() {
 	router.GET("/posts", postsHandler.GetPosts)
 	protected.GET("/posts/mine", postsHandler.GetOwningPosts)
 
+	jobsRepository := jobs.NewRepository()
+	jobsWorker := jobs.NewWorker(jobsRepository)
+	jobsService := jobs.NewService(jobsRepository, jobsWorker)
+	jobsHandler := jobs.NewHandler(jobsService)
+
+	router.POST("/jobs", jobsHandler.EnqueueJob)
+	router.GET("/jobs/:id", jobsHandler.GetJobStats)
+
 	port, err := strconv.Atoi(os.Getenv("API_PORT"))
 	if err != nil {
 		panic(err)
 	}
 
+	go jobsWorker.Run(context.Background())
 	err = router.Run(fmt.Sprintf(":%v", port))
 	if err != nil {
 		panic(err)
