@@ -1,0 +1,8 @@
+root = "."
+tmp_dir = "tmp"
+
+[build]
+  cmd = "go build -o ./tmp/worker.exe ./cmd/worker"
+  entrypoint = "tmp\\worker.exe"
+  exclude_dir = ["tmp", "vendor"]
+  stop_on_error = true

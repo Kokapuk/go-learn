@@ -46,6 +46,32 @@ services:
       timeout: 3s
       retries: 5
 
+  rabbitmq:
+    image: rabbitmq:4.3.4-alpine
+    env_file:
+      - .env
+    ports:
+      - '${RABBITMQ_PORT}:${RABBITMQ_PORT}'
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+      - rabbitmq_log:/var/log/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  worker:
+    env_file:
+      - .env
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["/worker"]
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+
   api:
     env_file:
       - .env
@@ -61,6 +87,10 @@ services:
         condition: service_completed_successfully
       redis:
         condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
 
 volumes:
   postgres_data:
+  rabbitmq_data:
+  rabbitmq_log:

@@ -3,6 +3,7 @@ package posts
 import (
 	"context"
 	"errors"
+	"go-learn/internal/jobs"
 	"log"
 
 	"github.com/redis/go-redis/v9"
@@ -11,10 +12,11 @@ import (
 type Service struct {
 	repository *Repository
 	cache      *Cache
+	publisher  *jobs.Publisher
 }
 
-func NewService(repository *Repository, cache *Cache) *Service {
-	return &Service{repository: repository, cache: cache}
+func NewService(repository *Repository, cache *Cache, publisher *jobs.Publisher) *Service {
+	return &Service{repository: repository, cache: cache, publisher: publisher}
 }
 
 func (s *Service) createPost(ctx context.Context, params createPostParams) (Post, error) {
@@ -24,6 +26,16 @@ func (s *Service) createPost(ctx context.Context, params createPostParams) (Post
 	}
 
 	if err := s.cache.invalidatePosts(ctx); err != nil {
+		log.Println(err)
+	}
+
+	message := jobs.PostCreatedMessage{
+		Type:      jobs.PostCreated,
+		PostID:    post.ID,
+		AuthorID:  post.AuthorID,
+		CreatedAt: post.CreatedAt,
+	}
+	if err := s.publisher.PublishPostCreated(ctx, message); err != nil {
 		log.Println(err)
 	}
 

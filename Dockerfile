@@ -15,11 +15,17 @@ RUN CGO_ENABLED=0 GOOS=linux go build \
     -o /api \
     ./cmd/api
 
+RUN CGO_ENABLED=0 GOOS=linux go build \
+    -trimpath \
+    -ldflags="-s -w" \
+    -o /worker \
+    ./cmd/worker
 
 FROM scratch
 
 COPY --from=build /api /api
+COPY --from=build /worker /worker
 COPY --from=build /etc/ssl/certs/ca-certificates.crt \
     /etc/ssl/certs/ca-certificates.crt
 
-ENTRYPOINT ["/api"]
+CMD ["/api"]

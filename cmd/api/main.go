@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"go-learn/internal/auth"
 	"go-learn/internal/jobs"
@@ -9,8 +10,11 @@ import (
 	"go-learn/internal/ratelimiter"
 	"go-learn/internal/validation"
 	"log"
+	"net/http"
 	"os"
+	"os/signal"
 	"strconv"
+	"syscall"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -26,9 +30,7 @@ func loadEnv() {
 	}
 }
 
-func connectDB() *pgxpool.Pool {
-	ctx := context.Background()
-
+func connectDB(ctx context.Context) *pgxpool.Pool {
 	pool, err := pgxpool.New(ctx, os.Getenv("DATABASE_URL"))
 	if err != nil {
 		panic(err)
@@ -42,7 +44,7 @@ func connectDB() *pgxpool.Pool {
 	return pool
 }
 
-func connectRedis() *redis.Client {
+func connectRedis(ctx context.Context) *redis.Client {
 	db, err := strconv.Atoi(os.Getenv("REDIS_DB"))
 	if err != nil {
 		panic(err)
@@ -54,7 +56,7 @@ func connectRedis() *redis.Client {
 		DB:       db,
 	})
 
-	err = redisClient.Ping(context.Background()).Err()
+	err = redisClient.Ping(ctx).Err()
 	if err != nil {
 		panic(err)
 	}
@@ -62,16 +64,61 @@ func connectRedis() *redis.Client {
 	return redisClient
 }
 
+func connectPublisher() *jobs.Publisher {
+	publisher, err := jobs.NewPublisher()
+	if err != nil {
+		panic(err)
+	}
+
+	return publisher
+}
+
+func runServer(ctx context.Context, router *gin.Engine) {
+	port, err := strconv.Atoi(os.Getenv("API_PORT"))
+	if err != nil {
+		panic(err)
+	}
+
+	server := &http.Server{
+		Addr:    fmt.Sprintf(":%d", port),
+		Handler: router,
+	}
+
+	go func() {
+		log.Printf("API listening on %s", server.Addr)
+
+		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Printf("HTTP server failed: %v", err)
+		}
+	}()
+
+	<-ctx.Done()
+	log.Println("Shutdown signal received")
+
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	if err := server.Shutdown(shutdownCtx); err != nil {
+		log.Printf("Graceful shutdown failed: %v", err)
+	}
+}
+
 func main() {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
 	loadEnv()
 
 	router := gin.Default()
 
-	pool := connectDB()
+	pool := connectDB(ctx)
 	defer pool.Close()
 
-	redisClient := connectRedis()
+	redisClient := connectRedis(ctx)
 	defer redisClient.Close()
+
+	publisher := connectPublisher()
+	defer publisher.Close()
 
 	limiter := ratelimiter.NewRateLimiter(redisClient)
 
@@ -90,29 +137,12 @@ func main() {
 
 	postsRepository := posts.NewRepository(pool)
 	postsCache := posts.NewCache(redisClient)
-	postsService := posts.NewService(postsRepository, postsCache)
+	postsService := posts.NewService(postsRepository, postsCache, publisher)
 	postsHandler := posts.NewHandler(postsService)
 
 	protected.POST("/posts", postsHandler.CreatePost)
 	router.GET("/posts", postsHandler.GetPosts)
 	protected.GET("/posts/mine", postsHandler.GetOwningPosts)
 
-	jobsRepository := jobs.NewRepository()
-	jobsWorker := jobs.NewWorker(jobsRepository)
-	jobsService := jobs.NewService(jobsRepository, jobsWorker)
-	jobsHandler := jobs.NewHandler(jobsService)
-
-	router.POST("/jobs", jobsHandler.EnqueueJob)
-	router.GET("/jobs/:id", jobsHandler.GetJobStats)
-
-	port, err := strconv.Atoi(os.Getenv("API_PORT"))
-	if err != nil {
-		panic(err)
-	}
-
-	go jobsWorker.Run(context.Background())
-	err = router.Run(fmt.Sprintf(":%v", port))
-	if err != nil {
-		panic(err)
-	}
+	runServer(ctx, router)
 }
